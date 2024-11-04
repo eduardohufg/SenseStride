@@ -42,33 +42,38 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Future<void> register() async {
-    final url = Uri.parse('${Config.baseUrl}/register');
+    final url = Uri.parse('${Config.baseUrl}/api/signup/');
     final response = await http.post(
       url,
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
-        "name": _nameController.text,
-        "lastname": _lastnameController.text,
-        "phone": _phoneController.text,
-        "password": _passwordController.text,
+        "nombre": _nameController.text,
+        "apellidos": _lastnameController.text,
+        "numero": _phoneController.text,
+        "contraseña": _passwordController.text,
       }),
     );
 
     if (response.statusCode == 200) {
       final responseData = json.decode(response.body);
 
-      // Almacenar token u otro dato necesario
-      await Storage.write('token', responseData['token'] ?? '');
+      // Almacenar id de usuario u otro dato necesario
+      await Storage.write('id_usuario', responseData['id_usuario'] ?? '');
 
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (BuildContext context) {
-          return const SuccessDialog(); // Usa el widget separado
+          return const SuccessDialog();
         },
       );
+    } else if (response.statusCode == 400) {
+      final responseData = json.decode(response.body);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(responseData['detail'] ?? 'Error al registrarse')),
+      );
     } else {
-      // Mostrar un mensaje de error si el registro falla
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Error al registrarse')),
       );

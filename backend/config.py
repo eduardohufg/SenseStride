@@ -17,3 +17,4 @@ if not MONGO_URI:
 client = MongoClient(MONGO_URI)
 db = client['SenseStride']
 users_collection = db['usuarios']
+metrics_collection = db['metricas']
