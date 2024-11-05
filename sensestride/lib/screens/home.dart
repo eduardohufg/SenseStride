@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:sensestride/storage.dart'; // Asegúrate de importar Storage
+import 'package:sensestride/screens/welcome.dart'; // Importar WelcomePage para navegar
+//import 'package:sensestride/screens/home.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -68,14 +71,67 @@ class _HomePageState extends State<HomePage> {
     int minutes = (milliseconds ~/ 60000) % 60;
     int seconds = (milliseconds ~/ 1000) % 60;
     int hundredths = (milliseconds ~/ 10) % 100;
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}:${hundredths.toString().padLeft(2, '0')}';
+    return '${minutes.toString().padLeft(2, '0')}:'
+        '${seconds.toString().padLeft(2, '0')}:'
+        '${hundredths.toString().padLeft(2, '0')}';
+  }
+
+  // Función para cerrar sesión
+  void _logout() async {
+    // Eliminar los tokens del almacenamiento seguro
+    await Storage.delete('access_token');
+    await Storage.delete('refresh_token');
+
+    // Navegar a la pantalla de bienvenida y eliminar las rutas anteriores
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const WelcomePage()),
+      (Route<dynamic> route) => false,
+    );
+  }
+
+  // Función para mostrar el diálogo de confirmación
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Cerrar sesión'),
+          content: const Text('¿Estás seguro de que deseas cerrar sesión?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Cerrar el diálogo
+              },
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(); // Cerrar el diálogo
+                _logout(); // Llamar a la función de logout
+              },
+              child: const Text('Cerrar sesión'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: const Text('Cronómetro'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.exit_to_app),
+            onPressed: () {
+              _showLogoutDialog();
+            },
+          ),
+        ],
       ),
       body: Center(
         child: Column(

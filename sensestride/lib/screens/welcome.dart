@@ -3,10 +3,13 @@ import 'package:sensestride/screens/login.dart';
 import 'package:flutter/material.dart';
 import 'package:sizer/sizer.dart';
 import 'package:sensestride/screens/signup.dart';
-import 'package:sensestride/screens/home.dart';
+//import 'package:sensestride/screens/home.dart';
+import 'package:sensestride/screens/profile.dart';
 import 'package:sensestride/storage.dart';
 import 'package:sensestride/config.dart';
 import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:jwt_decoder/jwt_decoder.dart'; // Importar jwt_decoder para manejar el token
 
 class WelcomePage extends StatefulWidget {
   const WelcomePage({super.key});
@@ -16,40 +19,95 @@ class WelcomePage extends StatefulWidget {
 }
 
 class _WelcomePageState extends State<WelcomePage> {
+  bool _isLoading = true; // Estado para manejar la carga inicial
+
   @override
   void initState() {
     super.initState();
-    _checkToken();
+    _checkAuthentication(); // Verificar autenticación al iniciar
   }
 
-  Future<void> _checkToken() async {
-    final token = await Storage.read('token');
-    if (token != null) {
-      final isValidToken = await _verifyToken(token);
-      if (isValidToken) {
+  // Función para verificar si el usuario está autenticado
+  Future<void> _checkAuthentication() async {
+    String? accessToken = await Storage.read('access_token');
+    if (accessToken != null) {
+      bool isExpired = JwtDecoder.isExpired(accessToken);
+      if (!isExpired) {
+        // Token válido, navegar a la página de inicio
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const HomePage()),
+          MaterialPageRoute(builder: (context) => const Profile()),
         );
+        return;
+      } else {
+        // Token expirado, intentar refrescar
+        await _refreshAccessToken();
+        return;
       }
     }
+    setState(() {
+      _isLoading = false; // Finalizar la carga
+    });
   }
 
-  Future<bool> _verifyToken(String token) async {
-    final url = Uri.parse('${Config.baseUrl}/verify');
-    final response = await http.get(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+  // Función para refrescar el access token usando el refresh token
+  Future<void> _refreshAccessToken() async {
+    String? refreshToken = await Storage.read('refresh_token');
+    if (refreshToken != null) {
+      final url = Uri.parse('${Config.baseUrl}/api/login/refresh');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({"refresh_token": refreshToken}),
+      );
 
-    return response.statusCode == 200;
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+
+        // Guardar el nuevo access token
+        await Storage.write('access_token', responseData['access_token']);
+        // Si el servidor devuelve un nuevo refresh token, actualízalo
+        if (responseData.containsKey('refresh_token')) {
+          await Storage.write('refresh_token', responseData['refresh_token']);
+        }
+
+        // Navegar a la página de inicio
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const Profile()),
+        );
+      } else {
+        // El refresh token es inválido, solicitar inicio de sesión
+        await Storage.delete('access_token');
+        await Storage.delete('refresh_token');
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Por favor, inicia sesión nuevamente.'),
+          ),
+        );
+      }
+    } else {
+      // No hay refresh token, solicitar inicio de sesión
+      await Storage.delete('access_token');
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      // Mostrar indicador de carga mientras se verifica la autenticación
+      return Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
     return Scaffold(
       body: SafeArea(
         child: Container(

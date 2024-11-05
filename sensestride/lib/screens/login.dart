@@ -2,12 +2,14 @@ import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
 import 'package:sizer/sizer.dart';
-import 'package:sensestride/screens/home.dart';
+//import 'package:sensestride/screens/home.dart';
 import 'package:sensestride/screens/signup.dart';
 import 'package:sensestride/storage.dart';
 import 'package:sensestride/config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:jwt_decoder/jwt_decoder.dart';
+import 'package:sensestride/screens/profile.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -23,52 +25,110 @@ class _LoginPageState extends State<LoginPage> {
   bool isFocusedEmail = false;
   bool isFocusedPassword = false;
 
-  // Future<void> login() async {
-  //   // Verificar si los campos están vacíos
-  //   if (_phoneController.text.isEmpty || _passwordController.text.isEmpty) {
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       const SnackBar(
-  //           content: Text('Por favor, completa todos los campos',
-  //               style: TextStyle(color: Colors.red))),
-  //     );
-  //     return; // Detener la ejecución si los campos están vacíos
-  //   }
+  @override
+  void initState() {
+    super.initState();
+    checkAuthentication(); // Verificar autenticación al iniciar
+  }
 
-  //   final url = Uri.parse('${Config.baseUrl}/login');
-  //   final response = await http.post(
-  //     url,
-  //     headers: {'Content-Type': 'application/json'},
-  //     body: jsonEncode({
-  //       "phone": _phoneController.text,
-  //       "password": _passwordController.text,
-  //     }),
-  //   );
+  // Función para verificar si el usuario está autenticado
+  Future<void> checkAuthentication() async {
+    String? accessToken = await Storage.read('access_token');
+    if (accessToken != null) {
+      bool isExpired = JwtDecoder.isExpired(accessToken);
+      if (!isExpired) {
+        // Token válido, navegar a la página de inicio
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const Profile()),
+        );
+      } else {
+        // Token expirado, intentar refrescar
+        await refreshAccessToken();
+      }
+    }
+  }
 
-  //   if (response.statusCode == 200) {
-  //     final responseData = json.decode(response.body);
+  // Función para refrescar el access token usando el refresh token
+  Future<void> refreshAccessToken() async {
+    String? refreshToken = await Storage.read('refresh_token');
+    if (refreshToken != null) {
+      final url = Uri.parse('${Config.baseUrl}/api/refresh');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({"refresh_token": refreshToken}),
+      );
 
-  //     // Almacenar el token en FlutterSecureStorage
-  //     await Storage.write('token', responseData['token']);
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
 
-  //     // Navegar a la página de inicio
-  //     Navigator.pushReplacement(
-  //       context,
-  //       MaterialPageRoute(builder: (context) => const HomePage()),
-  //     );
-  //   } else {
-  //     // Mostrar mensaje de error
-  //     ScaffoldMessenger.of(context).showSnackBar(
-  //       const SnackBar(content: Text('Error al iniciar sesión')),
-  //     );
-  //   }
-  // }
+        // Guardar el nuevo access token
+        await Storage.write('access_token', responseData['access_token']);
 
+        // Navegar a la página de inicio
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const Profile()),
+        );
+      } else {
+        // El refresh token es inválido, solicitar inicio de sesión
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content:
+                Text('Sesión expirada. Por favor, inicia sesión de nuevo.'),
+          ),
+        );
+      }
+    }
+  }
+
+  // Función de login
   Future<void> login() async {
-    // Navegar directamente a la página de inicio
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const HomePage()),
+    // Verificar si los campos están vacíos
+    if (_phoneController.text.isEmpty || _passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Por favor, completa todos los campos',
+            style: TextStyle(color: Colors.red),
+          ),
+        ),
+      );
+      return; // Detener la ejecución si los campos están vacíos
+    }
+
+    final url = Uri.parse('${Config.baseUrl}/api/login/');
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        "numero": _phoneController.text,
+        "contraseña": _passwordController.text,
+      }),
     );
+
+    if (response.statusCode == 200) {
+      final responseData = json.decode(response.body);
+
+      // Almacenar los tokens de forma segura
+      await Storage.write('access_token', responseData['access_token']);
+      await Storage.write('refresh_token', responseData['refresh_token']);
+      await Storage.write('phone_number', _phoneController.text);
+
+      // Navegar a la página de inicio
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const Profile()),
+      );
+    } else {
+      // Mostrar mensaje de error
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Número o contraseña incorrectos'),
+        ),
+      );
+    }
   }
 
   @override
