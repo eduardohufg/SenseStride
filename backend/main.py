@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routes import login, signup
+from routes import login, signup, load_data
 import uvicorn
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI() 
 app.include_router(login.app)  
 app.include_router(signup.app) 
+app.include_router(load_data.app)
 
 
 

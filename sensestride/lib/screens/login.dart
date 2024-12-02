@@ -2,7 +2,6 @@ import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
 import 'package:iconly/iconly.dart';
 import 'package:sizer/sizer.dart';
-//import 'package:sensestride/screens/home.dart';
 import 'package:sensestride/screens/signup.dart';
 import 'package:sensestride/storage.dart';
 import 'package:sensestride/config.dart';
@@ -10,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:sensestride/screens/profile.dart';
+import 'package:sensestride/screens/welcome.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -21,6 +21,8 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final FocusNode _phoneFocusNode = FocusNode();
+  final FocusNode _passwordFocusNode = FocusNode();
   bool isPasswordVisible = false;
   bool isFocusedEmail = false;
   bool isFocusedPassword = false;
@@ -28,6 +30,20 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+
+    // Añadir listeners a los FocusNodes para actualizar el estado cuando cambie el foco
+    _phoneFocusNode.addListener(() {
+      setState(() {
+        isFocusedEmail = _phoneFocusNode.hasFocus;
+      });
+    });
+
+    _passwordFocusNode.addListener(() {
+      setState(() {
+        isFocusedPassword = _passwordFocusNode.hasFocus;
+      });
+    });
+
     checkAuthentication(); // Verificar autenticación al iniciar
   }
 
@@ -37,13 +53,14 @@ class _LoginPageState extends State<LoginPage> {
     if (accessToken != null) {
       bool isExpired = JwtDecoder.isExpired(accessToken);
       if (!isExpired) {
-        // Token válido, navegar a la página de inicio
+        if (!mounted) return; // Verificar si el widget sigue montado
+
+        // Token válido, navegar a la página de perfil
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (context) => const Profile()),
         );
       } else {
-        // Token expirado, intentar refrescar
         await refreshAccessToken();
       }
     }
@@ -54,29 +71,43 @@ class _LoginPageState extends State<LoginPage> {
     String? refreshToken = await Storage.read('refresh_token');
     if (refreshToken != null) {
       final url = Uri.parse('${Config.baseUrl}/api/refresh');
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({"refresh_token": refreshToken}),
-      );
-
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-
-        // Guardar el nuevo access token
-        await Storage.write('access_token', responseData['access_token']);
-
-        // Navegar a la página de inicio
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const Profile()),
+      try {
+        final response = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({"refresh_token": refreshToken}),
         );
-      } else {
-        // El refresh token es inválido, solicitar inicio de sesión
+
+        if (response.statusCode == 200) {
+          final responseData = json.decode(response.body);
+
+          // Guardar el nuevo access token
+          await Storage.write('access_token', responseData['access_token']);
+
+          if (!mounted) return; // Verificar si el widget sigue montado
+
+          // Navegar a la página de perfil
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const Profile()),
+          );
+        } else {
+          if (!mounted) return; // Verificar si el widget sigue montado
+
+          // El refresh token es inválido, solicitar inicio de sesión
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content:
+                  Text('Sesión expirada. Por favor, inicia sesión de nuevo.'),
+            ),
+          );
+        }
+      } catch (e) {
+        if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content:
-                Text('Sesión expirada. Por favor, inicia sesión de nuevo.'),
+          SnackBar(
+            content: Text('Error al refrescar el token: $e'),
           ),
         );
       }
@@ -87,6 +118,8 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> login() async {
     // Verificar si los campos están vacíos
     if (_phoneController.text.isEmpty || _passwordController.text.isEmpty) {
+      if (!mounted) return; // Verificar si el widget sigue montado
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -99,33 +132,47 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     final url = Uri.parse('${Config.baseUrl}/api/login/');
-    final response = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        "numero": _phoneController.text,
-        "contraseña": _passwordController.text,
-      }),
-    );
-
-    if (response.statusCode == 200) {
-      final responseData = json.decode(response.body);
-
-      // Almacenar los tokens de forma segura
-      await Storage.write('access_token', responseData['access_token']);
-      await Storage.write('refresh_token', responseData['refresh_token']);
-      await Storage.write('phone_number', _phoneController.text);
-
-      // Navegar a la página de inicio
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const Profile()),
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          "numero": _phoneController.text,
+          "contraseña": _passwordController.text,
+        }),
       );
-    } else {
-      // Mostrar mensaje de error
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+
+        // Almacenar los tokens de forma segura
+        await Storage.write('access_token', responseData['access_token']);
+        await Storage.write('refresh_token', responseData['refresh_token']);
+        await Storage.write('phone_number', _phoneController.text);
+
+        if (!mounted) return; // Verificar si el widget sigue montado
+
+        // Navegar a la página de perfil
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const Profile()),
+        );
+      } else {
+        if (!mounted) return; // Verificar si el widget sigue montado
+
+        // Mostrar mensaje de error
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Número o contraseña incorrectos'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return; // Verificar si el widget sigue montado
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Número o contraseña incorrectos'),
+        SnackBar(
+          content: Text('Error de conexión: $e'),
         ),
       );
     }
@@ -135,6 +182,8 @@ class _LoginPageState extends State<LoginPage> {
   void dispose() {
     _phoneController.dispose();
     _passwordController.dispose();
+    _phoneFocusNode.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
   }
 
@@ -252,6 +301,8 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         child: TextField(
                           controller: _phoneController,
+                          focusNode: _phoneFocusNode,
+                          keyboardType: TextInputType.phone,
                           style: TextStyle(
                             fontWeight: FontWeight.w500,
                             color: Theme.of(context).colorScheme.secondary,
@@ -262,7 +313,6 @@ class _LoginPageState extends State<LoginPage> {
                             contentPadding:
                                 EdgeInsets.symmetric(vertical: 15.0),
                           ),
-                          focusNode: FocusNode(),
                         ),
                       ),
                     ),
@@ -304,6 +354,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         child: TextField(
                           controller: _passwordController,
+                          focusNode: _passwordFocusNode,
                           obscureText: !isPasswordVisible,
                           style: TextStyle(
                             fontWeight: FontWeight.w500,
@@ -329,11 +380,10 @@ class _LoginPageState extends State<LoginPage> {
                             contentPadding:
                                 const EdgeInsets.symmetric(vertical: 15.0),
                           ),
-                          focusNode: FocusNode(),
                         ),
                       ),
                     ),
-                    const Expanded(child: SizedBox(height: 10)),
+                    const SizedBox(height: 10),
                     FadeInUp(
                       delay: const Duration(milliseconds: 600),
                       duration: const Duration(milliseconds: 700),

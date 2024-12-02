@@ -2,21 +2,21 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:sensestride/storage.dart'; // Asegúrate de importar Storage
 import 'package:sensestride/screens/welcome.dart'; // Importar WelcomePage para navegar
-//import 'package:sensestride/screens/home.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({Key? key}) : super(key: key);
+  const HomePage({super.key});
 
   @override
   State<HomePage> createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
-  late Timer _timer;
+  Timer? _timer; // Declarar como nullable
   int _milliseconds = 0; // Tiempo en milisegundos
   bool _isRunning = false;
   bool _isFinished = false;
 
+  /// Iniciar o detener el cronómetro
   void _startStopTimer() {
     if (_isRunning) {
       _stopTimer();
@@ -25,26 +25,30 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  /// Iniciar el cronómetro
   void _startTimer() {
     setState(() {
       _isRunning = true;
       _isFinished = false;
     });
     _timer = Timer.periodic(const Duration(milliseconds: 10), (timer) {
+      if (!mounted) return; // Verificar si el widget aún está montado
       setState(() {
         _milliseconds += 10;
       });
     });
   }
 
+  /// Detener el cronómetro
   void _stopTimer() {
-    _timer.cancel();
+    _timer?.cancel(); // Cancelar si no es null
     setState(() {
       _isRunning = false;
       _isFinished = true; // Indica que el cronómetro está detenido
     });
   }
 
+  /// Reiniciar el cronómetro
   void _resetTimer() {
     setState(() {
       _milliseconds = 0;
@@ -53,6 +57,7 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  /// Guardar el tiempo (puedes implementar la lógica según tus necesidades)
   void _saveTime() {
     // Implementar función para guardar el tiempo
     ScaffoldMessenger.of(context).showSnackBar(
@@ -63,10 +68,11 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
-    if (_timer.isActive) _timer.cancel();
+    _timer?.cancel(); // Cancelar el timer si está activo
     super.dispose();
   }
 
+  /// Formatear el tiempo en mm:ss:hh
   String _formatTime(int milliseconds) {
     int minutes = (milliseconds ~/ 60000) % 60;
     int seconds = (milliseconds ~/ 1000) % 60;
@@ -76,7 +82,7 @@ class _HomePageState extends State<HomePage> {
         '${hundredths.toString().padLeft(2, '0')}';
   }
 
-  // Función para cerrar sesión
+  /// Función para cerrar sesión
   void _logout() async {
     // Eliminar los tokens del almacenamiento seguro
     await Storage.delete('access_token');
@@ -90,7 +96,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // Función para mostrar el diálogo de confirmación
+  /// Mostrar diálogo de confirmación para cerrar sesión
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -122,7 +128,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: true,
         title: const Text('Cronómetro'),
         actions: [
           IconButton(
